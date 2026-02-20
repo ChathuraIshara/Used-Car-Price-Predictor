@@ -1,0 +1,11 @@
+requests
+beautifulsoup4
+lxml
+pandas
+cloudscraper
+numpy
+scikit-learn
+xgboost
+joblib
+streamlit
+matplotlib

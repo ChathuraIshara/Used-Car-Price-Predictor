@@ -1,0 +1,55 @@
+Traceback (most recent call last):
+Status: 200
+
+=== ALL TEXT TAGS ===
+  head. : Toyota Aqua Used 2014 Hybrid Rs. 7600000 Sri Lanka
+  title. : Toyota Aqua Used 2014 Hybrid Rs. 7600000 Sri Lanka
+  div. : Post Free Vehicle AdLoginEdit My AdLeasing OfferContact UsContribute
+  div.header-wrap : Post Free Vehicle AdLoginEdit My AdLeasing OfferContact UsContribute
+  nav.header-nav : Post Free Vehicle AdLoginEdit My AdLeasing OfferContact UsContribute
+  a.header-button : Post Free Vehicle Ad
+  a. : Login
+  a. : Edit My Ad
+  a. : Leasing Offer
+  a. : Contact Us
+  a. : Contribute
+  div. : BuyCarsBuySUVsBuyVansBuyMotorbikesBuyLorriesBuyThree WheelBuyPickupsBuyHeavy-DutyBuySpare Parts
+  a.gbtn2 : BuyCars
+  span. : BuyCars
+  a.gbtn2 : BuySUVs
+  span. : BuySUVs
+  a.gbtn2 : BuyVans
+  span. : BuyVans
+  a.gbtn2 : BuyMotorbikes
+  span. : BuyMotorbikes
+  a.gbtn2 : BuyLorries
+  span. : BuyLorries
+  a.gbtn2 : BuyThree Wheel
+  span. : BuyThree Wheel
+  a.gbtn2 : BuyPickups
+  span. : BuyPickups
+  a.gbtn2 : BuyHeavy-Duty
+  File "D:\B21L4S1\ML\Assignment\inspect_page.py", line 23, in <module>
+  span. : BuyHeavy-Duty
+  a.gbtn2 : BuySpare Parts
+  span. : BuySpare Parts
+  div. : Premium Ad
+  h1. : Toyota Aqua 2014 Car (Used)
+  h2. : Posted by Raveesha Liyanage on 2026-02-11 12:35 pm, Horana
+  tr. : < Back
+  td. : < Back
+  div. : < Back
+  a.bbtn : < Back
+  tr. : Contact071 601 5833PriceRs. 7,600,000
+  td.aleft ftin : Contact
+  p.moreh : Contact
+  td.aleft tfiv : 071 601 5833
+  span.moreph : 071 601 5833
+  td.aleft ftin : Price
+  p.moreh : Price
+  td.aleft tfiv : Rs. 7,600,000
+  span.moreph : Rs. 7,600,000
+    print(f"  {tag.name}.{cls} : {txt[:100]}")
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 35-40: character maps to <undefined>
