@@ -13,6 +13,13 @@ from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, FunctionTransformer
 from sklearn.impute import SimpleImputer
 import xgboost as xgb
+from sklearn.base import BaseEstimator, TransformerMixin
+
+# ─────────────────────────────────────────────
+# Constants
+# ─────────────────────────────────────────────
+TOP_MAKES_COUNT = 15
+TOP_LOCATIONS_COUNT = 20
 
 # ─────────────────────────────────────────────
 # Path Setup
@@ -59,7 +66,7 @@ def load_and_clean_data(filepath):
     return df
 
 def feature_engineering(X):
-    """Adds car_age and mileage_per_year. Handles year column drop."""
+    """Adds car_age and mileage_per_year. Handles column removal."""
     X = X.copy()
     current_year = 2025
     
@@ -67,15 +74,34 @@ def feature_engineering(X):
     X["car_age"] = current_year - X["year"]
     
     # Create mileage_per_year
-    # Avoid divide by zero
     age = X["car_age"].replace(0, 1) 
     X["mileage_per_year"] = X["mileage_km"] / age
     
-    # Drop original year (if pipeline allows dropping)
-    # Note: ColumnTransformer usually easier if we return transformed DF
-    # But for strict pipeline, we keep year until ColumnTransformer drops it?
-    # Actually, we can just let ColumnTransformer pick columns.
+    # Drop columns that are definitely not used in the model
+    # 'model' is high cardinality and was dropped in preprocess.py
+    # 'year' is replaced by 'car_age'
+    cols_to_drop = ["model", "year"]
+    X.drop(columns=[c for c in cols_to_drop if c in X.columns], inplace=True)
+    
     return X
+
+class CategoricalGrouper(BaseEstimator, TransformerMixin):
+    """Groups rare categories into 'Other' based on training frequency."""
+    def __init__(self, top_n=10):
+        self.top_n = top_n
+        self.top_categories_ = {}
+
+    def fit(self, X, y=None):
+        X = pd.DataFrame(X)
+        for col in X.columns:
+            self.top_categories_[col] = X[col].value_counts().nlargest(self.top_n).index.tolist()
+        return self
+
+    def transform(self, X):
+        X = pd.DataFrame(X).copy()
+        for col in X.columns:
+            X[col] = X[col].where(X[col].isin(self.top_categories_[col]), other="Other")
+        return X
 
 # ─────────────────────────────────────────────
 # 2. Build Pipeline
@@ -91,19 +117,33 @@ def build_pipeline():
         ("scaler", MinMaxScaler())
     ])
     
-    # Categorical Transformer: Impute mode -> OneHot
+    # Categorical Transformer: Group -> Impute -> OneHot
     categorical_transformer = Pipeline(steps=[
+        ("grouper", CategoricalGrouper(top_n=TOP_MAKES_COUNT)), # Placeholder top_n, refined per column below if needed
         ("imputer", SimpleImputer(strategy="most_frequent")),
         ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
     ])
     
-    # Column Transformer
+    # Specific Column Transformer to handle different Top-N values
     preprocessor = ColumnTransformer(
         transformers=[
             ("num", numeric_transformer, numeric_features),
-            ("cat", categorical_transformer, categorical_features),
+            ("make", Pipeline([
+                ("group", CategoricalGrouper(top_n=TOP_MAKES_COUNT)),
+                ("impute", SimpleImputer(strategy="most_frequent")),
+                ("ohe", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
+            ]), ["make"]),
+            ("loc", Pipeline([
+                ("group", CategoricalGrouper(top_n=TOP_LOCATIONS_COUNT)),
+                ("impute", SimpleImputer(strategy="most_frequent")),
+                ("ohe", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
+            ]), ["location"]),
+            ("cat_general", Pipeline([
+                ("impute", SimpleImputer(strategy="most_frequent")),
+                ("ohe", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
+            ]), ["fuel_type", "transmission"]),
         ],
-        remainder="drop"  # Drop unused columns (like model, year)
+        remainder="drop"
     )
     
     # Full Pipeline

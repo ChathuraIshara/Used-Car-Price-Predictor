@@ -6,9 +6,9 @@ import joblib
 import os
 import matplotlib.pyplot as plt
 
-# Import the custom functions needed for the pipeline
+# Import the custom functions/classes needed for the pipeline
 # (Must be imported so joblib can find them)
-from train_inference_pipeline import load_and_clean_data, feature_engineering
+from train_inference_pipeline import load_and_clean_data, feature_engineering, CategoricalGrouper
 
 # ─────────────────────────────────────────────
 # Page Config & Styling
@@ -78,6 +78,15 @@ def get_dropdown_options():
     for col in ["make", "model", "location", "fuel_type", "transmission"]:
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip().str.title()
+    
+    # Filter out known scraping artifacts and invalid entries
+    if "transmission" in df.columns:
+        df = df[df["transmission"].isin(["Manual", "Automatic"])]
+    
+    if "fuel_type" in df.columns:
+        valid_fuels = ["Petrol", "Diesel", "Hybrid", "Electric"]
+        df = df[df["fuel_type"].isin(valid_fuels)]
+        
     return df
 
 try:
@@ -95,13 +104,30 @@ st.sidebar.title("🚗 Car Details")
 st.sidebar.write("Enter vehicle specifications to get an estimated market price.")
 
 # 1. Make
-makes = sorted(df_options["make"].unique())
-selected_make = st.sidebar.selectbox("Make", makes, index=makes.index("Toyota") if "Toyota" in makes else 0)
+# Extract top makes from pipeline to ensure sync
+try:
+    # Try to find the 'make' transformer
+    if 'make' in pipeline.named_steps['preprocessor'].named_transformers_:
+        make_transformer = pipeline.named_steps['preprocessor'].named_transformers_['make']
+        # If it's a Pipeline, we need to go deeper
+        if hasattr(make_transformer, 'named_steps'):
+            grouper = make_transformer.named_steps['group']
+        else:
+            grouper = make_transformer
+        
+        valid_makes = grouper.top_categories_.get('make')
+        if valid_makes is None:
+            valid_makes = list(grouper.top_categories_.values())[0]
+            
+        makes = sorted(valid_makes) + ["Other"]
+    else:
+        st.sidebar.error("⚠️ Model mismatch! Please Clear Cache in Streamlit menu (Top Right -> Settings -> Clear Cache) or restart the app.")
+        makes = sorted(df_options["make"].unique())
+except Exception as e:
+    st.sidebar.warning(f"Note: Could not sync 'Make' list with model. ({e})")
+    makes = sorted(df_options["make"].unique())
 
-# 2. Model (Filtered by Make)
-filtered_models = df_options[df_options["make"] == selected_make]["model"].unique()
-filtered_models = sorted(filtered_models)
-selected_model = st.sidebar.selectbox("Model", filtered_models)
+selected_make = st.sidebar.selectbox("Make", makes, index=makes.index("Toyota") if "Toyota" in makes else 0)
 
 # 3. Year
 min_year = int(df_options["year"].min())
@@ -122,8 +148,26 @@ selected_fuel = st.sidebar.selectbox("Fuel Type", fuel_types, index=0)
 trans_types = sorted(df_options["transmission"].unique())
 selected_trans = st.sidebar.radio("Transmission", trans_types, horizontal=True)
 
-# 8. Location
-locations = sorted(df_options["location"].unique())
+# 7. Location
+try:
+    if 'loc' in pipeline.named_steps['preprocessor'].named_transformers_:
+        loc_transformer = pipeline.named_steps['preprocessor'].named_transformers_['loc']
+        if hasattr(loc_transformer, 'named_steps'):
+            grouper = loc_transformer.named_steps['group']
+        else:
+            grouper = loc_transformer
+            
+        valid_locs = grouper.top_categories_.get('location')
+        if valid_locs is None:
+            valid_locs = list(grouper.top_categories_.values())[0]
+            
+        locations = sorted(valid_locs) + ["Other"]
+    else:
+        locations = sorted(df_options["location"].unique())
+except Exception as e:
+    st.sidebar.warning(f"Note: Could not sync 'Location' list with model. ({e})")
+    locations = sorted(df_options["location"].unique())
+
 selected_location = st.sidebar.selectbox("Location", locations, index=locations.index("Colombo") if "Colombo" in locations else 0)
 
 # ─────────────────────────────────────────────
@@ -136,7 +180,6 @@ if st.sidebar.button("Predict Price"):
     # Construct DataFrame for pipeline
     input_data = pd.DataFrame([{
         "make": selected_make,
-        "model": selected_model,
         "year": selected_year,
         "mileage_km": selected_mileage,
         "engine_cc": selected_engine,
@@ -166,7 +209,7 @@ if st.sidebar.button("Predict Price"):
             with col2:
                 # Comparison logic
                 st.subheader("Vehicle Summary")
-                st.write(f"**{selected_year} {selected_make} {selected_model}**")
+                st.write(f"**{selected_year} {selected_make}**")
                 
                 # Simple visual metric (Mileage vs Average)
                 avg_mileage = df_options[(df_options["make"]==selected_make) & (df_options["year"]==selected_year)]["mileage_km"].median()
