@@ -16,13 +16,13 @@ Steps performed
 7.  Feature engineering (car_age, mileage_per_year)
 8.  Label encoding for ordinal features
 9.  One-hot encoding for nominal features
-10. Min-Max normalisation for numeric features
+10. (Skipped – no scaling needed for XGBoost)
 11. Save preprocessed CSV
 """
 
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler
+from sklearn.preprocessing import LabelEncoder
 
 # ─────────────────────────────────────────────
 # 1. Load raw data
@@ -214,17 +214,14 @@ df.drop(columns=["make", "model", "location", "transmission"], inplace=True, err
 print(f"  Dropped: make, model, location, transmission (replaced by encoded columns)")
 
 # ─────────────────────────────────────────────
-# 8. Normalisation (Min-Max Scaling)
+# 8. Scaling SKIPPED
+#    XGBoost is tree-based and does not require
+#    feature normalisation / scaling.
 # ─────────────────────────────────────────────
 print("\n" + "=" * 60)
-print("STEP 8 – Min-Max normalisation of numeric features")
+print("STEP 8 – Scaling SKIPPED (not needed for XGBoost)")
 print("=" * 60)
-
-numeric_cols = ["mileage_km", "engine_cc", "car_age", "mileage_per_year"]
-scaler = MinMaxScaler()
-df[numeric_cols] = scaler.fit_transform(df[numeric_cols])
-print(f"  Scaled (0–1): {numeric_cols}")
-print(f"  NOTE: price_lkr (target) is intentionally NOT scaled")
+print("  XGBoost is a tree-based model – numeric scaling is unnecessary.")
 
 # ─────────────────────────────────────────────
 # 9. Final summary & save

@@ -33,6 +33,16 @@ st.markdown("""
         height: 3em;
         border-radius: 10px;
     }
+    .stButton>button:hover {
+        background-color: #d63031 !important;
+        color: white !important;
+        border-color: #d63031 !important;
+    }
+    .stButton>button:focus,
+    .stButton>button:active {
+        background-color: #c0392b !important;
+        color: white !important;
+    }
     .price-card {
         background-color: #ffffff;
         padding: 2rem;
@@ -226,6 +236,164 @@ if st.sidebar.button("Predict Price"):
                 
                 st.info("This prediction is based on over 4,000 listings from Riyasewana.com.")
                 
+            # ─────────────────────────────────────────────
+            # 9. SHAP Explainability Graph
+            # ─────────────────────────────────────────────
+            st.markdown("---")
+            with st.expander("🔍 **Explain This Prediction (How features affected price)**"):
+                import shap
+                import re
+                import matplotlib.pyplot as plt
+                
+                # 1. Prepare data for model
+                feat_eng = pipeline.named_steps['feat_eng']
+                preprocessor = pipeline.named_steps['preprocessor']
+                model = pipeline.named_steps['regressor']
+                
+                # We need a background sample for robust explanation (sampled from cached options)
+                @st.cache_data
+                def get_background_data():
+                    sample_size = 50
+                    bg_df = df_options.sample(sample_size, random_state=42)
+                    bg_eng = feat_eng.transform(bg_df.drop(columns=["price_lkr"], errors="ignore"))
+                    bg_trans = preprocessor.transform(bg_eng)
+                    return bg_trans
+
+                try:
+                    X_bg = get_background_data()
+                    X_eng = feat_eng.transform(input_data)
+                    X_trans = preprocessor.transform(X_eng)
+                    feature_names = [name.split("__")[-1] for name in preprocessor.get_feature_names_out()]
+                    X_df_single = pd.DataFrame(X_trans, columns=feature_names)
+                    
+                    # 2. Robust Explainer Initialization
+                    try:
+                        explainer = shap.TreeExplainer(model)
+                        shap_values = explainer(X_df_single)
+                    except Exception as e:
+                        error_msg = str(e)
+                        # Extract the base_score from error like "[6.16E6]"
+                        nums = re.findall(r"[\d\.E\+]+", error_msg)
+                        if nums:
+                            try:
+                                fixed_score = float(nums[0])
+                                model.set_params(base_score=fixed_score)
+                                explainer = shap.TreeExplainer(model)
+                                shap_values = explainer(X_df_single)
+                            except:
+                                explainer = shap.Explainer(model.predict, X_bg)
+                                shap_values = explainer(X_df_single)
+                        else:
+                            explainer = shap.Explainer(model.predict, X_bg)
+                            shap_values = explainer(X_df_single)
+
+                    if shap_values is not None:
+                        st.write("This chart shows how features pushed the price up or down (in **LKR**) from the average.")
+                        
+                        # Clean feature names
+                        clean_names = []
+                        for name in feature_names:
+                            clean = name.split("__")[-1]
+                            clean = clean.replace("location_", "").replace("make_", "").replace("fuel_type_", "").replace("transmission_", "")
+                            clean_names.append(clean)
+                        
+                        # Get raw display values
+                        X_display = X_eng.copy()
+                        raw_vals = {}
+                        for i, feat in enumerate(feature_names):
+                            if feat in X_display.columns:
+                                try:
+                                    raw_vals[clean_names[i]] = int(X_display[feat].iloc[0])
+                                except:
+                                    raw_vals[clean_names[i]] = X_display[feat].iloc[0]
+                            else:
+                                raw_vals[clean_names[i]] = int(X_df_single.iloc[0, i])
+                        
+                        # Extract top features by absolute impact
+                        sv = shap_values[0]
+                        impacts = sv.values.flatten()
+                        top_n = 10
+                        top_idx = np.argsort(np.abs(impacts))[-top_n:][::-1]
+                        
+                        top_names = [clean_names[i] for i in top_idx]
+                        top_impacts = [impacts[i] for i in top_idx]
+                        top_raw = [raw_vals.get(clean_names[i], "") for i in top_idx]
+                        
+                        # Calculate "other features" combined impact
+                        all_idx = set(range(len(impacts)))
+                        other_idx = all_idx - set(top_idx)
+                        other_impact = sum(impacts[i] for i in other_idx)
+                        other_count = len(other_idx)
+                        
+                        # Append "other features" as the last entry
+                        top_names.append(f"{other_count} other features")
+                        top_impacts.append(other_impact)
+                        top_raw.append("")
+                        
+                        # Build labels: "value = feature_name"
+                        y_labels = []
+                        for raw, name in zip(top_raw, top_names):
+                            if raw != "":
+                                y_labels.append(f"{raw} = {name}")
+                            else:
+                                y_labels.append(name)
+                        
+                        # Custom horizontal bar chart (full control over labels)
+                        fig, ax = plt.subplots(figsize=(12, 8))
+                        colors = ['#ff0051' if v > 0 else '#1e88e5' for v in top_impacts]
+                        
+                        # Reverse so biggest impact is on top
+                        y_pos = range(len(top_impacts))
+                        bars = ax.barh(
+                            y_pos,
+                            list(reversed(top_impacts)),
+                            color=list(reversed(colors)),
+                            height=0.6,
+                            edgecolor='white',
+                            linewidth=0.5
+                        )
+                        ax.set_yticks(list(y_pos))
+                        ax.set_yticklabels(list(reversed(y_labels)), fontsize=11)
+                        
+                        # Add value labels on the RIGHT side of each bar (never on the left)
+                        for bar, val in zip(bars, reversed(top_impacts)):
+                            width = bar.get_width()
+                            label = f"{'+' if val > 0 else ''}{int(val):,}"
+                            # Always place label at the end of the bar, on the outside
+                            if width >= 0:
+                                ax.text(width + abs(ax.get_xlim()[1]) * 0.01, bar.get_y() + bar.get_height()/2,
+                                        label, ha='left', va='center', fontsize=10, fontweight='bold',
+                                        color='#ff0051')
+                            else:
+                                # BLUE bars: place label on the RIGHT side (positive x direction)
+                                ax.text(abs(ax.get_xlim()[1]) * 0.01, bar.get_y() + bar.get_height()/2,
+                                        label, ha='left', va='center', fontsize=10, fontweight='bold',
+                                        color='#1e88e5')
+                        
+                        # Base value annotation
+                        # Calculate E[f(X)] and f(x)
+                        base_val = sv.base_values if np.isscalar(sv.base_values) else sv.base_values[0]
+                        fx_val = base_val + impacts.sum()  # f(x) = base + sum of all SHAP values
+                        
+                        ax.set_xlabel(
+                            f"SHAP Impact on Price (LKR)\n"
+                            f"E[f(X)] = {int(base_val):,} LKR  →  f(x) = {int(fx_val):,} LKR",
+                            fontsize=11
+                        )
+                        ax.set_title("Price Impact Analysis (Actual LKR)", fontsize=14, pad=15)
+                        ax.axvline(x=0, color='grey', linewidth=0.8, linestyle='--')
+                        ax.spines['right'].set_visible(False)
+                        ax.spines['top'].set_visible(False)
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        st.caption(
+                            f"E[f(X)] = {int(base_val):,} LKR (avg price)  →  "
+                            f"f(x) = {int(fx_val):,} LKR (this prediction). "
+                            "🔴 Increases price | 🔵 Decreases price."
+                        )
+                except Exception as shap_err:
+                    st.warning(f"Could not generate explanation: {shap_err}")
+
         except Exception as e:
             st.error(f"Prediction failed: {e}")
             st.error("Please check if the input values are reasonable.")

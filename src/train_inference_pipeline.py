@@ -10,7 +10,7 @@ import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, FunctionTransformer
+from sklearn.preprocessing import OneHotEncoder, FunctionTransformer
 from sklearn.impute import SimpleImputer
 import xgboost as xgb
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -103,6 +103,9 @@ class CategoricalGrouper(BaseEstimator, TransformerMixin):
             X[col] = X[col].where(X[col].isin(self.top_categories_[col]), other="Other")
         return X
 
+    def get_feature_names_out(self, input_features=None):
+        return input_features
+
 # ─────────────────────────────────────────────
 # 2. Build Pipeline
 # ─────────────────────────────────────────────
@@ -111,10 +114,9 @@ def build_pipeline():
     numeric_features = ["mileage_km", "engine_cc", "car_age", "mileage_per_year"]
     categorical_features = ["make", "fuel_type", "transmission", "location"]
     
-    # Numeric Transformer: Impute median -> Scale
+    # Numeric Transformer: Impute median (no scaling – XGBoost is tree-based)
     numeric_transformer = Pipeline(steps=[
         ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", MinMaxScaler())
     ])
     
     # Categorical Transformer: Group -> Impute -> OneHot
