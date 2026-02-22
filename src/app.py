@@ -6,8 +6,7 @@ import joblib
 import os
 import matplotlib.pyplot as plt
 
-# Import the custom functions/classes needed for the pipeline
-# (Must be imported so joblib can find them)
+
 from train_inference_pipeline import load_and_clean_data, feature_engineering, CategoricalGrouper
 
 # ─────────────────────────────────────────────
